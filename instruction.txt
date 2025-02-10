@@ -1,0 +1,39 @@
+Create a Solana program for a prediction market with these requirements:
+
+Core functionality:
+
+
+Initialize market with YES/NO tokens
+Add/remove liquidity
+Trade tokens using constant product AMM (x*y=k)
+0.3% trading fee
+Market resolution mechanism
+
+
+Technical specifications:
+
+
+PDA for market account
+Token mints initialized during market creation
+Initial liquidity provision
+Slippage protection
+Price impact calculations
+
+
+Error handling:
+
+
+Invalid amounts
+Insufficient liquidity
+Resolution timing checks
+Unauthorized access
+
+
+Optional features:
+
+
+LP token rewards
+Oracle integration
+Multiple resolution sources
+
+Include tests and deployment instructions
