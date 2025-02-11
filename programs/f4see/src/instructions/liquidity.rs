@@ -2,10 +2,12 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, TransferChecked};
 
+use crate::errors::PredictionMarketError;
 use crate::states::Market;
 use crate::utils::utils::*;
+
 #[derive(Accounts)]
-pub struct AddLiquidity<'info> {
+pub struct Liquidity<'info> {
     #[account(mut)]
     pub liquidity_provider: Signer<'info>,
 
@@ -77,13 +79,32 @@ pub struct AddLiquidity<'info> {
     )]
     pub no_pool: Box<Account<'info, TokenAccount>>,
 
+    #[account(
+        init_if_needed,
+        payer = liquidity_provider,
+        mint::decimals = 0,
+        mint::authority = market,
+        mint::freeze_authority = market,
+        seeds = [b"lp", market.key().as_ref()],
+        bump
+    )]
+    pub lp_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        init_if_needed,
+        payer = liquidity_provider,
+        associated_token::mint = lp_mint,
+        associated_token::authority = liquidity_provider
+    )]
+    pub liquidity_provider_lp_ata: Box<Account<'info, TokenAccount>>,
+
     // System programs
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
-impl<'info> AddLiquidity<'info> {
+impl<'info> Liquidity<'info> {
     pub fn add_liquidity(&mut self, amount: u64) -> Result<()> {
         msg!("Market frozen: {}", self.market.frozen);
         msg!("Market resolved: {}", self.market.resolved);
@@ -144,10 +165,118 @@ impl<'info> AddLiquidity<'info> {
         )?;
         msg!("mint_outcome_tokens: {}", amount);
 
+        // Mint LP tokens to liquidity provider
+        mint_lp_tokens(
+            &self.lp_mint.to_account_info(),
+            &self.liquidity_provider_lp_ata.to_account_info(),
+            amount,
+            &self.market.to_account_info(),
+            &self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
         // Update market state
         update_market_state(&mut self.market, liquidity_shares)?;
 
         msg!("update_market_state: {}", amount);
+
+        Ok(())
+    }
+
+    pub fn remove_liquidity(&mut self, amount: u64) -> Result<()> {
+        // Validate market state
+        require!(!self.market.frozen, PredictionMarketError::MarketFrozen);
+        require!(!self.market.resolved, PredictionMarketError::MarketResolved);
+        require!(
+            self.market.total_liquidity_shares >= amount,
+            PredictionMarketError::InsufficientLiquidityShares
+        );
+
+        // Get current pool balances
+        let yes_pool_balance = self.yes_mint.supply;
+        let no_pool_balance = self.no_mint.supply;
+
+        // Calculate value of liquidity shares being removed
+        let liquidity_share_value = (std::cmp::min(yes_pool_balance, no_pool_balance) * amount)
+            / self.market.total_liquidity_shares;
+
+        // Calculate temporary pool state after removal
+        let temp_yes_balance = yes_pool_balance
+            .checked_sub(liquidity_share_value)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        let temp_no_balance = no_pool_balance
+            .checked_sub(liquidity_share_value)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+
+        // Determine which outcome is more expensive (has fewer shares)
+        let (shares_to_receive, most_expensive_pool) = if yes_pool_balance <= no_pool_balance {
+            (no_pool_balance - temp_no_balance, false) // Receive NO shares
+        } else {
+            (yes_pool_balance - temp_yes_balance, true) // Receive YES shares
+        };
+
+        // Get market signer seeds
+        let creator_key = self.market.creator.key();
+        let seed_bytes = self.market.seed.to_le_bytes();
+        let market_seeds = &[
+            b"market",
+            creator_key.as_ref(),
+            &seed_bytes,
+            &[self.market.market_bump],
+        ];
+        let signer_seeds = &[&market_seeds[..]];
+
+        // Transfer outcome tokens based on which pool is more expensive
+        if most_expensive_pool {
+            // Transfer NO tokens
+            let cpi_accounts = TransferChecked {
+                from: self.no_pool.to_account_info(),
+                to: self.lp_no_position.to_account_info(),
+                authority: self.market.to_account_info(),
+                mint: self.no_mint.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new_with_signer(
+                self.token_program.to_account_info(),
+                cpi_accounts,
+                signer_seeds,
+            );
+            token::transfer_checked(cpi_ctx, shares_to_receive, self.no_mint.decimals)?;
+        } else {
+            // Transfer YES tokens
+            let cpi_accounts = TransferChecked {
+                from: self.yes_pool.to_account_info(),
+                to: self.lp_yes_position.to_account_info(),
+                authority: self.market.to_account_info(),
+                mint: self.yes_mint.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new_with_signer(
+                self.token_program.to_account_info(),
+                cpi_accounts,
+                signer_seeds,
+            );
+            token::transfer_checked(cpi_ctx, shares_to_receive, self.yes_mint.decimals)?;
+        }
+
+        // Transfer USDC back to liquidity provider
+        let cpi_accounts = TransferChecked {
+            from: self.usdc_vault.to_account_info(),
+            to: self.liquidity_provider_usdc.to_account_info(),
+            authority: self.market.to_account_info(),
+            mint: self.usdc_mint.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            cpi_accounts,
+            signer_seeds,
+        );
+        token::transfer_checked(cpi_ctx, liquidity_share_value, self.usdc_mint.decimals)?;
+
+        // Update market state
+        self.market.total_liquidity_shares = self
+            .market
+            .total_liquidity_shares
+            .checked_sub(amount)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
 
         Ok(())
     }

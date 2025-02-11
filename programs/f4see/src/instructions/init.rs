@@ -123,7 +123,7 @@ impl<'info> InitializeMarket<'info> {
         let no_pool_balance = self.no_mint.supply;
         msg!("Yes pool balance {:?}", yes_pool_balance);
         msg!("No pool balance {:?}", no_pool_balance);
-        let (liquidity_shares, yes_shares, no_shares) =
+        let (_, yes_shares, no_shares) =
             calculate_liquidity_shares(yes_pool_balance, no_pool_balance, amount)?;
         msg!("Minting shares {:?}", (yes_shares, no_shares));
         let creator_key = self.creator.key();

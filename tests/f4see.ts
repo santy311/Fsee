@@ -4,6 +4,7 @@ import { Fsee } from "../target/types/fsee";
 import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {  createMint, getAssociatedTokenAddress, getAssociatedTokenAddressSync, getMint, getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
 import { SendTransactionError } from "@solana/web3.js";
+import { ComputeBudgetProgram } from "@solana/web3.js";
 let USDC_MINT;
 
 describe("fsee", () => {
@@ -19,7 +20,7 @@ describe("fsee", () => {
   let market_creator = Keypair.generate();
   let lp = Keypair.generate();
   let buyer = Keypair.generate();
-
+  let buyer_no = Keypair.generate();
   let market: PublicKey;
 
   before(async () => {
@@ -36,12 +37,15 @@ describe("fsee", () => {
     const airdrop4 = await connection.requestAirdrop(buyer.publicKey, 10 * LAMPORTS_PER_SOL);
     await connection.confirmTransaction(airdrop4);
 
+    const airdrop5 = await connection.requestAirdrop(buyer_no.publicKey, 10 * LAMPORTS_PER_SOL);
+    await connection.confirmTransaction(airdrop5);
+
     console.log("Balances");
     console.log("minter:" + minter.publicKey.toBase58() + " balance:" + await connection.getBalance(minter.publicKey));
     console.log("market_creator", market_creator.publicKey.toBase58() + " balance:" + await connection.getBalance(market_creator.publicKey));
     console.log("lp", lp.publicKey.toBase58() + " balance:" + await connection.getBalance(lp.publicKey));
     console.log("buyer", buyer.publicKey.toBase58() + " balance:" + await connection.getBalance(buyer.publicKey));
-
+    console.log("buyer_no", buyer_no.publicKey.toBase58() + " balance:" + await connection.getBalance(buyer_no.publicKey));
     // create a token called "USDC"
     const mint = await createMint(
       connection,
@@ -66,7 +70,7 @@ describe("fsee", () => {
       mint,
       creatorTokenAccount.address,
       minter.publicKey,
-      1000000
+      10000
     )
 
     let balance = await connection.getTokenAccountBalance(creatorTokenAccount.address);
@@ -87,7 +91,7 @@ describe("fsee", () => {
       mint,
       lpTokenAccount.address,
       minter.publicKey,
-      1000000
+      50000
     )
 
     const buyerTokenAccount = await getOrCreateAssociatedTokenAccount(
@@ -103,14 +107,34 @@ describe("fsee", () => {
       mint,
       buyerTokenAccount.address,
       minter.publicKey,
-      1000000
+      10000
     )
 
     const buyerBalance = await connection.getTokenAccountBalance(buyerTokenAccount.address);
 
-    console.log("Buyer token account", buyerTokenAccount.address.toBase58());
-    console.log("Buyer token account balance", buyerBalance.value.amount);
-    console.log("Mint created", mint.toBase58());
+    // console.log("Buyer token account", buyerTokenAccount.address.toBase58());
+    // console.log("Buyer token account balance", buyerBalance.value.amount);
+    // console.log("Mint created", mint.toBase58());
+
+    const buyer_no_token_account = await getOrCreateAssociatedTokenAccount(
+      connection,
+      buyer_no,
+      mint,
+      buyer_no.publicKey
+    )
+
+    await mintTo(
+      connection,
+      minter,
+      mint,
+      buyer_no_token_account.address,
+      minter.publicKey,
+      50000
+    )
+
+    const buyer_no_balance = await connection.getTokenAccountBalance(buyer_no_token_account.address);
+    // console.log("Buyer no token account", buyer_no_token_account.address.toBase58());
+    // console.log("Buyer no token account balance", buyer_no_balance.value.amount);
   });
 
   it("Is initialized!", async () => {
@@ -126,10 +150,10 @@ describe("fsee", () => {
       program.programId
     )[0];
 
-    console.log("Market", market.toBase58());
-    const liquidity_amt = new anchor.BN(500*100);
+    const liquidity_amt = new anchor.BN(0*100);
 
     try {
+      
       const tx = await program.methods
         .initializeMarket(SEED, description, liquidity_amt)
         .accounts({
@@ -139,20 +163,9 @@ describe("fsee", () => {
         .rpc({commitment: "confirmed"});
 
       await connection.confirmTransaction(tx);
-      console.log("Market created with tx", tx);
 
-      const tx_detail = await connection.getTransaction(tx, {
-        commitment: "confirmed",
-      });
-      // console.log("Tx detail", tx_detail);
-      let market_account = await program.account.market.fetch(market);
-      console.log("Market account parsed:", {
-        frozen: market_account.frozen,
-        resolved: market_account.resolved,
-        outcome: market_account.outcome,
-      });
-
-      console.log("Your transaction signature", tx);
+      console.log("Market created");
+      await print_all_accounts();
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -188,19 +201,8 @@ describe("fsee", () => {
 
     await connection.confirmTransaction(tx);
 
-    const tx_detail = await connection.getTransaction(tx, {
-      commitment: "confirmed",
-    });
-    console.log("Tx detail", tx_detail);
-
-    let market_account = await program.account.market.fetch(market);
-    console.log("Market account", market_account);
-
-    let lp_yes_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.yesMint, lp.publicKey);
-    let lp_no_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.noMint, lp.publicKey); 
-    console.log("lp yes position", await connection.getTokenAccountBalance(lp_yes_ata.address));
-    console.log("lp no position", await connection.getTokenAccountBalance(lp_no_ata.address));
-
+    console.log("Adding liquidity");
+    await print_all_accounts();
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -211,13 +213,13 @@ describe("fsee", () => {
   });
 
   it("Get price at time of trade", async () => {
-    console.log(await calculate_price_at_trade(market, BigInt(294*100), true, 0));
+    console.log(await calculate_price_at_trade(market, BigInt(25*100), true, 0));
   });
 
   it("Buy yes", async () => {
     try {
     let tx = await program.methods
-      .buy(true, new BN(294*100))
+      .buy(true, new BN(25*100))
       .accounts({
         predictor: buyer.publicKey,
         usdcMint: USDC_MINT,
@@ -225,19 +227,6 @@ describe("fsee", () => {
       })
       .signers([buyer])
       .rpc({commitment: "confirmed"});
-
-      let tx_detail = await connection.getTransaction(tx, {
-        commitment: "confirmed",
-      });
-      console.log("Tx detail", tx_detail);
-
-
-      let market_account = await program.account.market.fetch(market);
-      console.log("Market account", market_account);
-      let buyer_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.yesMint, buyer.publicKey);
-      let buyer_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.noMint, buyer.publicKey);
-      console.log("buyer yes position", (await connection.getTokenAccountBalance(buyer_yes_ata.address)).value.amount);
-      console.log("buyer no position", (await connection.getTokenAccountBalance(buyer_no_ata.address)).value.amount);
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -246,11 +235,103 @@ describe("fsee", () => {
       throw e;
     }
 
+    console.log("Buying yes");
+    await print_all_accounts();
+
   });
 
   it("Get price 2", async () => {
-    console.log(await get_price(market, true, BigInt(100)));
+    console.log(await get_price(market, true));
   });
+
+  it("Buy no", async () => {
+    try {
+    let tx = await program.methods
+      .buy(false, new BN(500*100))
+      .accounts({
+        predictor: buyer_no.publicKey,
+        usdcMint: USDC_MINT,
+        market: market,
+      })
+      .signers([buyer_no])
+      .rpc({commitment: "confirmed"});
+
+    const tx_detail = await connection.getTransaction(tx, {
+      commitment: "confirmed",
+    });
+    console.log("Tx detail", tx_detail);
+    console.log("Buying no");
+    await print_all_accounts();
+
+    } catch (e: any) {
+      console.log("Error", e);
+      if (e instanceof SendTransactionError) {
+        console.log("Error",await  e.logs);
+      }
+      throw e;
+    }
+
+    console.log("Buying no");
+    await print_all_accounts();
+
+  });
+
+  it("Get price 3", async () => {
+    console.log(await get_price(market, true));
+  });
+
+  // it("Remove liquidity", async () => {
+  //   let tx = await program.methods
+  //     .removeLiquidity(new BN(1*100))
+  //     .accounts({
+  //       liquidityProvider: lp.publicKey,
+  //       usdcMint: USDC_MINT,
+  //       market: market,
+  //     })
+  //     .signers([lp])
+  //     .rpc({commitment: "confirmed"});
+  // });
+
+  it("Resolve market", async () => {
+    let tx = await program.methods
+      .resolveMarket(true)
+      .accounts({
+        predictor: market_creator.publicKey,
+        usdcMint: USDC_MINT,
+        market: market,
+      })
+      .signers([market_creator])
+      .rpc({commitment: "confirmed"});
+
+      await connection.confirmTransaction(tx);
+
+      const market_account = await program.account.market.fetch(market);
+      console.log("Market account", market_account);
+  });
+
+  it("Redeem tokens", async () => {
+
+   
+    let market_account = await program.account.market.fetch(market);
+    let buyer_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.yesMint, buyer.publicKey);
+    let buyer_yes_balance = await connection.getTokenAccountBalance(buyer_yes_ata.address);
+    console.log("Buyer yes balance", buyer_yes_balance.value.amount);
+    
+    let tx = await program.methods
+      .redeemTokens(new BN(buyer_yes_balance.value.amount), new BN(0))
+      .accounts({
+        predictor: buyer.publicKey,
+        usdcMint: USDC_MINT,
+        market: market,
+      })
+      .signers([buyer])
+      .rpc({commitment: "confirmed"});
+
+      await connection.confirmTransaction(tx);
+
+      console.log("Redeeming tokens");
+      await print_all_accounts();
+    });
 
   const PRECISION = BigInt(10000); // 4 decimal places
 
@@ -282,10 +363,6 @@ describe("fsee", () => {
     const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
     const yes_pool_balance = BigInt((await connection.getTokenAccountBalance(market_yes_ata)).value.amount);
     const no_pool_balance = BigInt((await connection.getTokenAccountBalance(market_no_ata)).value.amount);
-
-    console.log("yes pool balance", yes_pool_balance);
-    console.log("no pool balance", no_pool_balance);
-
 
     console.log("yes pool balance", yes_pool_balance);
     console.log("no pool balance", no_pool_balance);
@@ -357,7 +434,6 @@ describe("fsee", () => {
   async function get_price(
       market: PublicKey, 
       option: boolean, 
-      amount: bigint
   ): Promise<PriceResult> {
       const market_account = await program.account.market.fetch(market);
       const total_liquidity_shares = market_account.totalLiquidityShares;
@@ -366,9 +442,7 @@ describe("fsee", () => {
       const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
       const yes_pool_balance = BigInt((await connection.getTokenAccountBalance(market_yes_ata)).value.amount);
       const no_pool_balance = BigInt((await connection.getTokenAccountBalance(market_no_ata)).value.amount);
-  
-      console.log("yes pool balance", yes_pool_balance);
-      console.log("no pool balance", no_pool_balance);
+
   
 
       const lp_yes_shares = await getOrCreateAssociatedTokenAccount(
@@ -385,7 +459,7 @@ describe("fsee", () => {
           market_creator.publicKey
       );
 
-      const prices = calculate_outcome_shares(yes_pool_balance, no_pool_balance, amount);
+      const prices = calculate_outcome_shares(yes_pool_balance, no_pool_balance);
       console.log("prices", prices);
       return prices;
   }
@@ -393,7 +467,6 @@ describe("fsee", () => {
   function calculate_outcome_shares(
       yes_pool_balance: bigint, 
       no_pool_balance: bigint, 
-      amount: bigint
   ): PriceResult {
       // Input validation
       if (yes_pool_balance <= BigInt(0) || no_pool_balance <= BigInt(0)) {
@@ -441,5 +514,85 @@ describe("fsee", () => {
   // Helper function to convert from number to high precision BigInt
   function toFixedPoint(value: number): bigint {
       return BigInt(Math.floor(value * Number(PRECISION)));
+  }
+
+  async function print_all_accounts() {
+    // Get market account data
+    const market_account = await program.account.market.fetch(market);
+    
+    // Get all relevant token accounts
+    const market_yes_ata = await getAssociatedTokenAddressSync(market_account.yesMint, market, true);
+    const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
+    const market_usdc_ata = await getAssociatedTokenAddressSync(USDC_MINT, market, true);
+
+    // Get balances for market creator
+    const creator_yes_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, market_account.yesMint, market_creator.publicKey);
+    const creator_no_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, market_account.noMint, market_creator.publicKey);
+    const creator_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, USDC_MINT, market_creator.publicKey);
+
+    // Get balances for LP
+    const lp_yes_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.yesMint, lp.publicKey);
+    const lp_no_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.noMint, lp.publicKey);
+    const lp_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, lp, USDC_MINT, lp.publicKey);
+    const lp_mint_ata = await getOrCreateAssociatedTokenAccount(connection, lp, USDC_MINT, market, true);
+
+    // Get balances for buyers
+    const buyer_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.yesMint, buyer.publicKey);
+    const buyer_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.noMint, buyer.publicKey);
+    const buyer_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, USDC_MINT, buyer.publicKey);
+
+    const buyer_no_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, market_account.yesMint, buyer_no.publicKey);
+    const buyer_no_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, market_account.noMint, buyer_no.publicKey);
+    const buyer_no_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, USDC_MINT, buyer_no.publicKey);
+
+    // Helper function to format USDC amount
+    const formatUSDC = (amount: string) => (Number(amount) / 100).toFixed(2);
+
+    // Format data for table
+    const data = [
+        {
+            Account: "Market",
+            YES: (await connection.getTokenAccountBalance(market_yes_ata)).value.amount,
+            NO: (await connection.getTokenAccountBalance(market_no_ata)).value.amount,
+            USDC: formatUSDC((await connection.getTokenAccountBalance(market_usdc_ata)).value.amount),
+            "LP Mint": "N/A"
+        },
+        {
+            Account: "Creator",
+            YES: (await connection.getTokenAccountBalance(creator_yes_ata.address)).value.amount,
+            NO: (await connection.getTokenAccountBalance(creator_no_ata.address)).value.amount,
+            USDC: formatUSDC((await connection.getTokenAccountBalance(creator_usdc_ata.address)).value.amount),
+            "LP Mint": "N/A"
+        },
+        {
+            Account: "LP",
+            YES: (await connection.getTokenAccountBalance(lp_yes_ata.address)).value.amount,
+            NO: (await connection.getTokenAccountBalance(lp_no_ata.address)).value.amount,
+            USDC: formatUSDC((await connection.getTokenAccountBalance(lp_usdc_ata.address)).value.amount),
+            "LP Mint": formatUSDC((await connection.getTokenAccountBalance(lp_mint_ata.address)).value.amount)
+        },
+        {
+            Account: "Buyer",
+            YES: (await connection.getTokenAccountBalance(buyer_yes_ata.address)).value.amount,
+            NO: (await connection.getTokenAccountBalance(buyer_no_ata.address)).value.amount,
+            USDC: formatUSDC((await connection.getTokenAccountBalance(buyer_usdc_ata.address)).value.amount),
+            "LP Mint": "N/A"
+        },
+        {
+            Account: "Buyer NO",
+            YES: (await connection.getTokenAccountBalance(buyer_no_yes_ata.address)).value.amount,
+            NO: (await connection.getTokenAccountBalance(buyer_no_no_ata.address)).value.amount,
+            USDC: formatUSDC((await connection.getTokenAccountBalance(buyer_no_usdc_ata.address)).value.amount),
+            "LP Mint": "N/A"
+        }
+    ];
+
+    // Print market state
+    console.log("\nMarket State:");
+    console.log("Total Liquidity Shares:", formatUSDC(market_account.totalLiquidityShares.toString()));
+
+    // Print balances table
+    console.log("\nBalances:");
+    console.table(data);
   }
 });

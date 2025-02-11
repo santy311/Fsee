@@ -15,8 +15,7 @@ pub struct Market {
     pub market_bump: u8,
     pub yes_mint_bump: u8,
     pub no_mint_bump: u8,
-    // pub yes_pool_bump: u8,
-    // pub no_pool_bump: u8,
+    // pub lp_mint_bump: u8,
 }
 
 impl Space for Market {
@@ -35,5 +34,6 @@ impl Space for Market {
         1 + // no_mint_bump
         1 + // yes_pool_bump
         1 + // no_pool_bump
-        1; // no_mint_bump
+        // 1 + // lp_mint_bump
+        1; // lp_mint_bump
 }

@@ -102,6 +102,7 @@ pub fn update_market_state(market: &mut Account<Market>, liquidity_shares: u64) 
 pub fn calculate_price_at_trade(
     yes_pool_balance: u64,
     no_pool_balance: u64,
+    liquidity_shares: u64,
     amount: u64,
     option: bool,
     _fee_percentage: u64,
@@ -119,7 +120,7 @@ pub fn calculate_price_at_trade(
         new_shares_b = no_pool_balance + input_after_fee;
 
         // 2. Calculate new YES pool size maintaining constant product
-        new_shares_a = (yes_pool_balance * no_pool_balance) / new_shares_b;
+        new_shares_a = (liquidity_shares * liquidity_shares) / new_shares_b;
 
         // 3. Calculate tokens user receives (reduction in YES pool)
         let output_tokens = yes_pool_balance + amount - new_shares_a;
@@ -134,7 +135,7 @@ pub fn calculate_price_at_trade(
         new_shares_a = yes_pool_balance + input_after_fee;
 
         // 2. Calculate new NO pool size maintaining constant product
-        new_shares_b = (yes_pool_balance * no_pool_balance) / new_shares_a;
+        new_shares_b = (liquidity_shares * liquidity_shares) / new_shares_a;
 
         // 3. Calculate tokens user receives (reduction in NO pool)
         let output_tokens = no_pool_balance + amount - new_shares_b;
@@ -151,4 +152,26 @@ fn calculate_outcome_shares(yes_pool_balance: u64, no_pool_balance: u64) -> Resu
     let price_b = (yes_pool_balance as f64 * 10000.0 / total_shares as f64) as u64;
 
     Ok((price_a, price_b))
+}
+
+pub fn mint_lp_tokens<'a>(
+    lp_mint: &AccountInfo<'a>,
+    lp_pool: &AccountInfo<'a>,
+    amount: u64,
+    market: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let lp_mint_accounts = MintTo {
+        mint: lp_mint.to_account_info(),
+        to: lp_pool.to_account_info(),
+        authority: market.to_account_info(),
+    };
+
+    let cpi_program = token_program.to_account_info();
+    let cpi_ctx = CpiContext::new_with_signer(cpi_program.clone(), lp_mint_accounts, signer_seeds);
+
+    token::mint_to(cpi_ctx, amount)?;
+
+    Ok(())
 }

@@ -28,11 +28,23 @@ pub mod fsee {
         Ok(())
     }
 
-    pub fn add_liquidity(ctx: Context<AddLiquidity>, amount: u64) -> Result<()> {
+    pub fn add_liquidity(ctx: Context<Liquidity>, amount: u64) -> Result<()> {
         ctx.accounts.add_liquidity(amount)
+    }
+
+    pub fn remove_liquidity(ctx: Context<Liquidity>, amount: u64) -> Result<()> {
+        ctx.accounts.remove_liquidity(amount)
     }
 
     pub fn buy(ctx: Context<Swap>, option: bool, amount: u64) -> Result<()> {
         ctx.accounts.buy(option, amount)
+    }
+
+    pub fn resolve_market(ctx: Context<ResolveMarket>, outcome: bool) -> Result<()> {
+        ctx.accounts.resolve_market(outcome)
+    }
+
+    pub fn redeem_tokens(ctx: Context<Swap>, yes_tokens: u64, no_tokens: u64) -> Result<()> {
+        ctx.accounts.redeem_tokens(yes_tokens, no_tokens)
     }
 }
