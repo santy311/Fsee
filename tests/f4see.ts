@@ -280,38 +280,38 @@ describe("fsee", () => {
     console.log(await get_price(market, true));
   });
 
-  it("Remove liquidity", async () => {
-    try {
-    let tx = await program.methods
-      .removeLiquidity(new BN(500*100))
-      .accounts({
-        liquidityProvider: lp.publicKey,
-        usdcMint: USDC_MINT,
-        market: market,
-      })
-      .signers([lp])
-      .rpc({commitment: "confirmed"});
+  // it("Remove liquidity", async () => {
+  //   try {
+  //   let tx = await program.methods
+  //     .removeLiquidity(new BN(500*100))
+  //     .accounts({
+  //       liquidityProvider: lp.publicKey,
+  //       usdcMint: USDC_MINT,
+  //       market: market,
+  //     })
+  //     .signers([lp])
+  //     .rpc({commitment: "confirmed"});
 
-      await connection.confirmTransaction(tx);
+  //     await connection.confirmTransaction(tx);
 
-      const tx_detail = await connection.getTransaction(tx, {
-        commitment: "confirmed",
-      });
-      // console.log("Tx detail", tx_detail);
-      console.log("Removing liquidity");
-      await print_all_accounts();
-    } catch (e: any) {
-      console.log("Error", e);
-      if (e instanceof SendTransactionError) {
-        console.log("Error",await  e.logs);
-      }
-      throw e;
-    }
-  });
+  //     const tx_detail = await connection.getTransaction(tx, {
+  //       commitment: "confirmed",
+  //     });
+  //     // console.log("Tx detail", tx_detail);
+  //     console.log("Removing liquidity");
+  //     await print_all_accounts();
+  //   } catch (e: any) {
+  //     console.log("Error", e);
+  //     if (e instanceof SendTransactionError) {
+  //       console.log("Error",await  e.logs);
+  //     }
+  //     throw e;
+  //   }
+  // });
 
   it("Resolve market", async () => {
     let tx = await program.methods
-      .resolveMarket(true)
+      .resolveMarket(false)
       .accounts({
         predictor: market_creator.publicKey,
         usdcMint: USDC_MINT,
@@ -388,6 +388,35 @@ describe("fsee", () => {
       console.log("Redeeming LP tokens");
       await print_all_accounts();
     });
+
+      it("Remove liquidity", async () => {
+    try {
+    let tx = await program.methods
+      .removeLiquidity(new BN(500*100))
+      .accounts({
+        liquidityProvider: lp.publicKey,
+        usdcMint: USDC_MINT,
+        market: market,
+      })
+      .signers([lp])
+      .rpc({commitment: "confirmed"});
+
+      await connection.confirmTransaction(tx);
+
+      const tx_detail = await connection.getTransaction(tx, {
+        commitment: "confirmed",
+      });
+      // console.log("Tx detail", tx_detail);
+      console.log("Removing liquidity");
+      await print_all_accounts();
+    } catch (e: any) {
+      console.log("Error", e);
+      if (e instanceof SendTransactionError) {
+        console.log("Error",await  e.logs);
+      }
+      throw e;
+    }
+  });
 
   const PRECISION = BigInt(10000); // 4 decimal places
 

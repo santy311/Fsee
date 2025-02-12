@@ -180,14 +180,6 @@ impl<'info> Liquidity<'info> {
     }
 
     pub fn remove_liquidity(&mut self, amount: u64) -> Result<()> {
-        // Validate market state
-        require!(!self.market.frozen, PredictionMarketError::MarketFrozen);
-        require!(!self.market.resolved, PredictionMarketError::MarketResolved);
-        require!(
-            self.market.total_liquidity_shares >= amount,
-            PredictionMarketError::InsufficientLiquidityShares
-        );
-
         // Get current pool balances
         let yes_pool_balance = self.yes_pool.amount;
         let no_pool_balance = self.no_pool.amount;
