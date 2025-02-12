@@ -48,6 +48,13 @@ pub struct Liquidity<'info> {
     )]
     pub no_mint: Box<Account<'info, Mint>>,
 
+    #[account(
+        mut,
+        seeds = [b"lp_mint", market.key().as_ref()],
+        bump = market.lp_mint_bump
+    )]
+    pub lp_mint: Box<Account<'info, Mint>>,
+
     // LP token position accounts
     #[account(
         init_if_needed,
@@ -78,17 +85,6 @@ pub struct Liquidity<'info> {
         associated_token::authority = market
     )]
     pub no_pool: Box<Account<'info, TokenAccount>>,
-
-    #[account(
-        init_if_needed,
-        payer = liquidity_provider,
-        mint::decimals = 0,
-        mint::authority = market,
-        mint::freeze_authority = market,
-        seeds = [b"lp", market.key().as_ref()],
-        bump
-    )]
-    pub lp_mint: Box<Account<'info, Mint>>,
 
     #[account(
         init_if_needed,
@@ -193,42 +189,90 @@ impl<'info> Liquidity<'info> {
         );
 
         // Get current pool balances
-        let yes_pool_balance = self.yes_mint.supply;
-        let no_pool_balance = self.no_mint.supply;
+        let yes_pool_balance = self.yes_pool.amount;
+        let no_pool_balance = self.no_pool.amount;
+        let market_liquidity = self.usdc_vault.amount;
+        let (price_yes, price_no) = calculate_outcome_shares(yes_pool_balance, no_pool_balance)?;
 
-        // Calculate value of liquidity shares being removed
-        let liquidity_share_value = (std::cmp::min(yes_pool_balance, no_pool_balance) * amount)
-            / self.market.total_liquidity_shares;
+        const SCALE: u64 = 1_000_000;
 
+        // Calculate the proportion of liquidity being removed, scaled by SCALE
+        let liquidity_proportion = (amount * SCALE) / self.market.total_liquidity_shares;
+        let yes_shares_to_remove = (yes_pool_balance * liquidity_proportion) / SCALE;
+        let no_shares_to_remove = (no_pool_balance * liquidity_proportion) / SCALE;
+
+        msg!("yes_shares_to_remove: {:?}", yes_shares_to_remove);
+        msg!("no_shares_to_remove: {:?}", no_shares_to_remove);
+
+        msg!("yes_pool_balance: {:?}", yes_pool_balance);
+        msg!("no_pool_balance: {:?}", no_pool_balance);
+        msg!("market_liquidity: {:?}", market_liquidity);
+        msg!("amount: {:?}", amount);
         // Calculate temporary pool state after removal
         let temp_yes_balance = yes_pool_balance
-            .checked_sub(liquidity_share_value)
+            .checked_sub(yes_shares_to_remove)
             .ok_or(PredictionMarketError::ArithmeticError)?;
         let temp_no_balance = no_pool_balance
-            .checked_sub(liquidity_share_value)
+            .checked_sub(no_shares_to_remove)
             .ok_or(PredictionMarketError::ArithmeticError)?;
 
-        // Determine which outcome is more expensive (has fewer shares)
-        let (shares_to_receive, most_expensive_pool) = if yes_pool_balance <= no_pool_balance {
-            (no_pool_balance - temp_no_balance, false) // Receive NO shares
-        } else {
-            (yes_pool_balance - temp_yes_balance, true) // Receive YES shares
-        };
+        msg!("temp_yes_balance: {:?}", temp_yes_balance);
+        msg!("temp_no_balance: {:?}", temp_no_balance);
 
         // Get market signer seeds
         let creator_key = self.market.creator.key();
-        let seed_bytes = self.market.seed.to_le_bytes();
-        let market_seeds = &[
+        let seed = self.market.seed.to_le_bytes();
+        let market_bump = self.market.market_bump;
+
+        // Store temporary values
+        let signer_seeds: &[&[&[u8]]] = &[&[
             b"market",
             creator_key.as_ref(),
-            &seed_bytes,
-            &[self.market.market_bump],
-        ];
-        let signer_seeds = &[&market_seeds[..]];
+            seed.as_ref(),
+            &[market_bump],
+        ]];
 
-        // Transfer outcome tokens based on which pool is more expensive
-        if most_expensive_pool {
-            // Transfer NO tokens
+        burn_tokens(
+            &self.yes_mint.to_account_info(),
+            &self.yes_pool.to_account_info(),
+            yes_shares_to_remove,
+            &self.market.to_account_info(),
+            &self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
+        burn_tokens(
+            &self.no_mint.to_account_info(),
+            &self.no_pool.to_account_info(),
+            no_shares_to_remove,
+            &self.market.to_account_info(),
+            &self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
+        msg!("amount: {}", amount);
+        msg!("yes_shares_to_remove: {:?}", yes_shares_to_remove);
+        msg!("no_shares_to_remove: {:?}", no_shares_to_remove);
+        msg!("market_liquidity: {}", market_liquidity);
+        msg!("yes_pool_balance: {}", yes_pool_balance);
+        msg!("no_pool_balance: {}", no_pool_balance);
+        msg!("temp_yes_balance: {:?}", temp_yes_balance);
+        msg!("temp_no_balance: {:?}", temp_no_balance);
+        // msg!("price_yes: {}", price_yes);
+        // msg!("price_no: {}", price_no);
+
+        // Determine which outcome is more expensive (has fewer shares)
+        if yes_pool_balance <= no_pool_balance {
+            let shares_outcome_no = temp_yes_balance
+                .checked_mul(price_yes)
+                .ok_or(PredictionMarketError::ArithmeticError)?
+                .checked_div(price_no)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            // Transfer diff of NO shares to liquidity provider
+            let diff_no = temp_no_balance
+                .checked_sub(shares_outcome_no)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            msg!("diff_no: {}", diff_no);
             let cpi_accounts = TransferChecked {
                 from: self.no_pool.to_account_info(),
                 to: self.lp_no_position.to_account_info(),
@@ -240,9 +284,17 @@ impl<'info> Liquidity<'info> {
                 cpi_accounts,
                 signer_seeds,
             );
-            token::transfer_checked(cpi_ctx, shares_to_receive, self.no_mint.decimals)?;
+            token::transfer_checked(cpi_ctx, diff_no, self.no_mint.decimals)?;
         } else {
-            // Transfer YES tokens
+            let shares_outcome_yes = temp_no_balance
+                .checked_mul(price_no)
+                .ok_or(PredictionMarketError::ArithmeticError)?
+                .checked_div(price_yes)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            let diff_yes = temp_yes_balance
+                .checked_sub(shares_outcome_yes)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            msg!("diff_yes: {}", diff_yes);
             let cpi_accounts = TransferChecked {
                 from: self.yes_pool.to_account_info(),
                 to: self.lp_yes_position.to_account_info(),
@@ -254,8 +306,20 @@ impl<'info> Liquidity<'info> {
                 cpi_accounts,
                 signer_seeds,
             );
-            token::transfer_checked(cpi_ctx, shares_to_receive, self.yes_mint.decimals)?;
+            token::transfer_checked(cpi_ctx, diff_yes, self.yes_mint.decimals)?;
         }
+
+        // Burn LP tokens from liquidity provider
+        burn_tokens(
+            &self.lp_mint.to_account_info(),
+            &self.liquidity_provider_lp_ata.to_account_info(),
+            amount,
+            &self.liquidity_provider.to_account_info(),
+            &self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
+        msg!("burn_lp_tokens: {}", amount);
 
         // Transfer USDC back to liquidity provider
         let cpi_accounts = TransferChecked {
@@ -269,6 +333,9 @@ impl<'info> Liquidity<'info> {
             cpi_accounts,
             signer_seeds,
         );
+        let liquidity_share_value =
+            (std::cmp::min(yes_pool_balance, no_pool_balance) * liquidity_proportion) / SCALE;
+
         token::transfer_checked(cpi_ctx, liquidity_share_value, self.usdc_mint.decimals)?;
 
         // Update market state

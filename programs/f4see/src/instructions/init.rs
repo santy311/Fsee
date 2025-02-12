@@ -42,7 +42,7 @@ pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = creator,
-        mint::decimals = 0,
+        mint::decimals = 2,
         mint::authority = market,
         mint::freeze_authority = market,
         seeds = [b"yes_mint", market.key().as_ref()],
@@ -53,13 +53,24 @@ pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = creator,
-        mint::decimals = 0,
+        mint::decimals = 2,
         mint::authority = market,
         mint::freeze_authority = market,
         seeds = [b"no_mint", market.key().as_ref()],
         bump
     )]
     pub no_mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = creator,
+        mint::decimals = 2,
+        mint::authority = market,
+        mint::freeze_authority = market,
+        seeds = [b"lp_mint", market.key().as_ref()],
+        bump
+    )]
+    pub lp_mint: Account<'info, Mint>,
 
     #[account(
         init,
@@ -96,6 +107,7 @@ impl<'info> InitializeMarket<'info> {
             seed,
             yes_mint: self.yes_mint.key(),
             no_mint: self.no_mint.key(),
+            lp_mint: self.lp_mint.key(),
             description: description,
             frozen: false,
             resolved: false,
@@ -105,6 +117,7 @@ impl<'info> InitializeMarket<'info> {
             market_bump: bumps.market,
             yes_mint_bump: bumps.yes_mint,
             no_mint_bump: bumps.no_mint,
+            lp_mint_bump: bumps.lp_mint,
         });
 
         // Add initial liquidity if provided

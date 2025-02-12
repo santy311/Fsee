@@ -6,6 +6,7 @@ pub struct Market {
     pub seed: u64,
     pub yes_mint: Pubkey,
     pub no_mint: Pubkey,
+    pub lp_mint: Pubkey,
     pub description: String,
     pub frozen: bool,
     pub resolved: bool,
@@ -15,7 +16,7 @@ pub struct Market {
     pub market_bump: u8,
     pub yes_mint_bump: u8,
     pub no_mint_bump: u8,
-    // pub lp_mint_bump: u8,
+    pub lp_mint_bump: u8,
 }
 
 impl Space for Market {
@@ -23,6 +24,7 @@ impl Space for Market {
         32 + // seed
         32 + // yes_mint
         32 + // no_mint
+        32 + // lp_mint
         4 + 200 + // description
         1 + // frozen
         1 + // resolved
@@ -34,6 +36,6 @@ impl Space for Market {
         1 + // no_mint_bump
         1 + // yes_pool_bump
         1 + // no_pool_bump
-        // 1 + // lp_mint_bump
+        1 + // lp_mint_bump
         1; // lp_mint_bump
 }

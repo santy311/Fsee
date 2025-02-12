@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, TransferChecked};
+use anchor_spl::token::{self, Burn, Mint, Token, TokenAccount, TransferChecked};
 
 use crate::errors::PredictionMarketError;
 use crate::states::Market;
@@ -171,31 +171,29 @@ impl<'info> Swap<'info> {
         let outcome = self.market.outcome.unwrap();
 
         if yes_tokens > 0 {
-            msg!("Transferring yes tokens to yes pool");
+            msg!("Burning yes tokens");
             let cpi_program = self.token_program.to_account_info();
-            let cpi_account = TransferChecked {
-                from: self.predictor_yes_ata.to_account_info(),
+            let cpi_account = Burn {
                 mint: self.yes_mint.to_account_info(),
-                to: self.yes_pool.to_account_info(),
+                from: self.predictor_yes_ata.to_account_info(),
                 authority: self.predictor.to_account_info(),
             };
             let cpi_ctx = CpiContext::new(cpi_program, cpi_account);
-            token::transfer_checked(cpi_ctx, yes_tokens, self.yes_mint.decimals)?;
-            msg!("Yes tokens transferred to yes pool");
+            token::burn(cpi_ctx, yes_tokens)?;
+            msg!("Yes tokens burned");
         }
 
         if no_tokens > 0 {
-            msg!("Transferring no tokens to no pool");
+            msg!("Burning no tokens");
             let cpi_program = self.token_program.to_account_info();
-            let cpi_account = TransferChecked {
-                from: self.predictor_no_ata.to_account_info(),
+            let cpi_account = Burn {
                 mint: self.no_mint.to_account_info(),
-                to: self.no_pool.to_account_info(),
+                from: self.predictor_no_ata.to_account_info(),
                 authority: self.predictor.to_account_info(),
             };
             let cpi_ctx = CpiContext::new(cpi_program, cpi_account);
-            token::transfer_checked(cpi_ctx, no_tokens, self.no_mint.decimals)?;
-            msg!("No tokens transferred to no pool");
+            token::burn(cpi_ctx, no_tokens)?;
+            msg!("No tokens burned");
         }
 
         if outcome {
@@ -245,6 +243,11 @@ impl<'info> Swap<'info> {
         let signer_seeds = &[&market_seeds[..]];
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_account, signer_seeds);
         token::transfer_checked(cpi_ctx, amount, self.usdc_mint.decimals)?;
+        msg!(
+            "Transferred {} USDC to predictor: {}",
+            amount,
+            self.predictor.key()
+        );
         Ok(())
     }
 

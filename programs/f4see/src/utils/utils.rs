@@ -1,7 +1,7 @@
 use crate::errors::PredictionMarketError;
 use crate::state::Market;
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, MintTo};
+use anchor_spl::token::{self, Burn, MintTo};
 
 pub fn check_market_state(market: &Account<Market>, amount: u64) -> Result<()> {
     // Validate market state
@@ -120,10 +120,18 @@ pub fn calculate_price_at_trade(
         new_shares_b = no_pool_balance + input_after_fee;
 
         // 2. Calculate new YES pool size maintaining constant product
-        new_shares_a = (liquidity_shares * liquidity_shares) / new_shares_b;
+        new_shares_a = liquidity_shares
+            .checked_mul(liquidity_shares)
+            .ok_or(PredictionMarketError::MathOverflow)?
+            .checked_div(new_shares_b)
+            .ok_or(PredictionMarketError::MathOverflow)?;
 
         // 3. Calculate tokens user receives (reduction in YES pool)
-        let output_tokens = yes_pool_balance + amount - new_shares_a;
+        let output_tokens = yes_pool_balance
+            .checked_add(amount)
+            .ok_or(PredictionMarketError::MathOverflow)?
+            .checked_sub(new_shares_a)
+            .ok_or(PredictionMarketError::InsufficientLiquidityShares)?;
 
         // Calculate new prices
         let (price_a, price_b) = calculate_outcome_shares(new_shares_a, new_shares_b)?;
@@ -132,10 +140,23 @@ pub fn calculate_price_at_trade(
     } else {
         // When buying NO outcome:
         // 1. Add input_after_fee to YES pool (user provides tokens)
-        new_shares_a = yes_pool_balance + input_after_fee;
+        new_shares_a = yes_pool_balance
+            .checked_add(input_after_fee)
+            .ok_or(PredictionMarketError::MathOverflow)?;
 
         // 2. Calculate new NO pool size maintaining constant product
-        new_shares_b = (liquidity_shares * liquidity_shares) / new_shares_a;
+        new_shares_b = liquidity_shares
+            .checked_mul(liquidity_shares)
+            .ok_or(PredictionMarketError::MathOverflow)?
+            .checked_div(new_shares_a)
+            .ok_or(PredictionMarketError::MathOverflow)?;
+
+        msg!("New shares A: {}", new_shares_a);
+        msg!("New shares B: {}", new_shares_b);
+        msg!("Liquidity shares: {}", liquidity_shares);
+        msg!("Yes pool balance: {}", yes_pool_balance);
+        msg!("No pool balance: {}", no_pool_balance);
+        msg!("Amount: {}", amount);
 
         // 3. Calculate tokens user receives (reduction in NO pool)
         let output_tokens = no_pool_balance + amount - new_shares_b;
@@ -145,7 +166,7 @@ pub fn calculate_price_at_trade(
     }
 }
 
-fn calculate_outcome_shares(yes_pool_balance: u64, no_pool_balance: u64) -> Result<(u64, u64)> {
+pub fn calculate_outcome_shares(yes_pool_balance: u64, no_pool_balance: u64) -> Result<(u64, u64)> {
     let total_shares = yes_pool_balance + no_pool_balance;
 
     let price_a = (no_pool_balance as f64 * 10000.0 / total_shares as f64) as u64;
@@ -172,6 +193,28 @@ pub fn mint_lp_tokens<'a>(
     let cpi_ctx = CpiContext::new_with_signer(cpi_program.clone(), lp_mint_accounts, signer_seeds);
 
     token::mint_to(cpi_ctx, amount)?;
+
+    Ok(())
+}
+
+pub fn burn_tokens<'a>(
+    mint: &AccountInfo<'a>,
+    from: &AccountInfo<'a>,
+    amount: u64,
+    owner: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let burn_accounts = Burn {
+        mint: mint.to_account_info(),
+        from: from.to_account_info(),
+        authority: owner.to_account_info(),
+    };
+
+    let cpi_program = token_program.to_account_info();
+    let cpi_ctx = CpiContext::new_with_signer(cpi_program.clone(), burn_accounts, signer_seeds);
+
+    token::burn(cpi_ctx, amount)?;
 
     Ok(())
 }
