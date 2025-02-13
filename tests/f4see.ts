@@ -150,12 +150,11 @@ describe("fsee", () => {
       program.programId
     )[0];
 
-    const liquidity_amt = new anchor.BN(0*100);
 
     try {
       
       const tx = await program.methods
-        .initializeMarket(SEED, description, liquidity_amt)
+        .initializeMarket(SEED, description)
         .accounts({
           creator: market_creator.publicKey,
           usdcMint: USDC_MINT,
@@ -191,7 +190,7 @@ describe("fsee", () => {
     
     const tx = await program.methods
       .addLiquidity(liquidity_amt)
-      .accounts({
+      .accountsPartial({
         liquidityProvider: lp.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -220,7 +219,7 @@ describe("fsee", () => {
     try {
     let tx = await program.methods
       .buy(true, new BN(25*100))
-      .accounts({
+      .accountsPartial({
         predictor: buyer.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -248,7 +247,7 @@ describe("fsee", () => {
     try {
     let tx = await program.methods
       .buy(false, new BN(5000))
-      .accounts({
+      .accountsPartial({
         predictor: buyer_no.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -312,9 +311,8 @@ describe("fsee", () => {
   it("Resolve market", async () => {
     let tx = await program.methods
       .resolveMarket(false)
-      .accounts({
+      .accountsPartial({
         predictor: market_creator.publicKey,
-        usdcMint: USDC_MINT,
         market: market,
       })
       .signers([market_creator])
@@ -333,7 +331,7 @@ describe("fsee", () => {
     
     let tx = await program.methods
       .redeemTokens(new BN(buyer_yes_balance.value.amount), new BN(0))
-      .accounts({
+      .accountsPartial({
         predictor: buyer.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -351,7 +349,7 @@ describe("fsee", () => {
    
     tx = await program.methods
       .redeemTokens(new BN(0), new BN(buyer_no_balance.value.amount))
-      .accounts({
+      .accountsPartial({
         predictor: buyer_no.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -374,7 +372,7 @@ describe("fsee", () => {
    
     tx = await program.methods
       .redeemTokens(new BN(lp_yes_balance.value.amount), new BN(lp_no_balance.value.amount))
-      .accounts({
+      .accountsPartial({
         predictor: lp.publicKey,
         usdcMint: USDC_MINT,
         market: market,
@@ -393,7 +391,7 @@ describe("fsee", () => {
     try {
     let tx = await program.methods
       .removeLiquidity(new BN(500*100))
-      .accounts({
+      .accountsPartial({
         liquidityProvider: lp.publicKey,
         usdcMint: USDC_MINT,
         market: market,

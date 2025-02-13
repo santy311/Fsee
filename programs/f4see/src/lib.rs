@@ -21,10 +21,9 @@ pub mod fsee {
         ctx: Context<InitializeMarket>,
         seed: u64,
         description: String,
-        initial_liquidity: u64,
     ) -> Result<()> {
         ctx.accounts
-            .initialize_market(seed, description, initial_liquidity, &ctx.bumps)?;
+            .initialize_market(seed, description, &ctx.bumps)?;
         Ok(())
     }
 

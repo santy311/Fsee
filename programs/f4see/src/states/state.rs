@@ -19,9 +19,9 @@ pub struct Market {
     pub lp_mint_bump: u8,
 }
 
-impl Space for Market {
-    const INIT_SPACE: usize = 32 + // creator
-        32 + // seed
+impl Market {
+    pub const TOTAL_SPACE: usize = 32 + // creator
+        8 + // seed
         32 + // yes_mint
         32 + // no_mint
         32 + // lp_mint
@@ -34,8 +34,5 @@ impl Space for Market {
         1 + // market_bump
         1 + // yes_mint_bump
         1 + // no_mint_bump
-        1 + // yes_pool_bump
-        1 + // no_pool_bump
-        1 + // lp_mint_bump
         1; // lp_mint_bump
 }
