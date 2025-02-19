@@ -1,5 +1,0 @@
-{
-  "/markets/live/page": "app/markets/live/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/markets/completed/page": "app/markets/completed/page.js"
-}
