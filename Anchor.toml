@@ -11,7 +11,7 @@ fsee = "6FFcK3e2KnkEe1bJF9NEY5QdY2cSP5yRifH8Rwz2mExE"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

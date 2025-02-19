@@ -57,16 +57,14 @@ pub struct Liquidity<'info> {
 
     // LP token position accounts
     #[account(
-        init_if_needed,
-        payer = liquidity_provider,
+        mut,
         associated_token::mint = yes_mint,
         associated_token::authority = liquidity_provider
     )]
     pub lp_yes_position: Box<Account<'info, TokenAccount>>,
 
     #[account(
-        init_if_needed,
-        payer = liquidity_provider,
+        mut,
         associated_token::mint = no_mint,
         associated_token::authority = liquidity_provider
     )]
@@ -87,8 +85,7 @@ pub struct Liquidity<'info> {
     pub no_pool: Box<Account<'info, TokenAccount>>,
 
     #[account(
-        init_if_needed,
-        payer = liquidity_provider,
+        mut,
         associated_token::mint = lp_mint,
         associated_token::authority = liquidity_provider
     )]
@@ -102,37 +99,16 @@ pub struct Liquidity<'info> {
 
 impl<'info> Liquidity<'info> {
     pub fn add_liquidity(&mut self, amount: u64) -> Result<()> {
-        msg!("Market frozen: {}", self.market.frozen);
-        msg!("Market resolved: {}", self.market.resolved);
-        msg!("Market outcome: {:?}", self.market.outcome);
-        msg!("Market description: {:?}", self.market.description);
-        msg!(
-            "Market total_liquidity_shares: {}",
-            self.market.total_liquidity_shares
-        );
-        msg!("Market fee_percentage: {}", self.market.fee_percentage);
-        msg!("Market market_bump: {}", self.market.market_bump);
-        msg!("Market yes_mint_bump: {}", self.market.yes_mint_bump);
-        msg!("Market no_mint_bump: {}", self.market.no_mint_bump);
-
         // Validate market state
         check_market_state(&self.market, amount)?;
 
-        // Calculate shares to mint
         let yes_pool_balance = self.yes_mint.supply;
         let no_pool_balance = self.no_mint.supply;
-        msg!("yes_pool_balance: {}", yes_pool_balance);
-        msg!("no_pool_balance: {}", no_pool_balance);
         let (liquidity_shares, yes_shares, no_shares) =
             calculate_liquidity_shares(yes_pool_balance, no_pool_balance, amount)?;
-        msg!(
-            "Minting shares {:?}",
-            (liquidity_shares, yes_shares, no_shares)
-        );
 
         // Transfer USDC from liquidity provider to market vault
         self.transfer_usdc_to_vault(amount)?;
-        msg!("Successfully transferred usdc to vault: {}", amount);
 
         // Store temporary values
         let creator_key = self.market.creator.key();
@@ -159,7 +135,6 @@ impl<'info> Liquidity<'info> {
             no_shares,
             signer_seeds,
         )?;
-        msg!("mint_outcome_tokens: {}", amount);
 
         // Mint LP tokens to liquidity provider
         mint_lp_tokens(
@@ -173,8 +148,6 @@ impl<'info> Liquidity<'info> {
 
         // Update market state
         update_market_state(&mut self.market, liquidity_shares)?;
-
-        msg!("update_market_state: {}", amount);
 
         Ok(())
     }

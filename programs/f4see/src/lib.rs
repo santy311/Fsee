@@ -27,6 +27,16 @@ pub mod fsee {
         Ok(())
     }
 
+    pub fn initialize_yes_mints(ctx: Context<InitializeYesMints>) -> Result<()> {
+        ctx.accounts.initialize_yes_mints(&ctx.bumps)?;
+        Ok(())
+    }
+
+    pub fn initialize_no_mints(ctx: Context<InitializeNoMints>) -> Result<()> {
+        ctx.accounts.initialize_no_mints(&ctx.bumps)?;
+        Ok(())
+    }
+
     pub fn add_liquidity(ctx: Context<Liquidity>, amount: u64) -> Result<()> {
         ctx.accounts.add_liquidity(amount)
     }

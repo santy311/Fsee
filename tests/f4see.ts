@@ -5,6 +5,7 @@ import { PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {  createMint, getAssociatedTokenAddress, getAssociatedTokenAddressSync, getMint, getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
 import { SendTransactionError } from "@solana/web3.js";
 import { ComputeBudgetProgram } from "@solana/web3.js";
+import { calculate_price_at_trade, get_price, print_all_accounts } from './utils';
 let USDC_MINT;
 
 describe("fsee", () => {
@@ -161,10 +162,30 @@ describe("fsee", () => {
         }).signers([market_creator])
         .rpc({commitment: "confirmed"});
 
-      await connection.confirmTransaction(tx);
-
       console.log("Market created");
-      await print_all_accounts();
+
+      const tx2 = await program.methods
+        .initializeNoMints()
+        .accountsPartial({
+          creator: market_creator.publicKey,
+          market: market,
+        }).signers([market_creator])
+        .rpc({commitment: "confirmed"});
+
+      console.log("No mint created");
+
+      const tx3 = await program.methods
+        .initializeYesMints()
+        .accountsPartial({
+          creator: market_creator.publicKey,
+          market: market,
+        }).signers([market_creator])
+        .rpc({commitment: "confirmed"});
+
+      console.log("Yes mint created");
+
+      console.log("All market accounts created");
+      await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -172,6 +193,16 @@ describe("fsee", () => {
         throw e;
       }
     }
+  });
+
+  it("create ATAs", async () => {
+    const market_account = await program.account.market.fetch(market);
+    const yes_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.yesMint, lp.publicKey);
+    const no_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.noMint, lp.publicKey);
+    const lp_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.lpMint, lp.publicKey);
+    console.log("Yes ata", yes_ata.address.toBase58());
+    console.log("No ata", no_ata.address.toBase58());
+    console.log("Lp ata", lp_ata.address.toBase58());
   });
 
   it("Add liquidity", async () => {
@@ -201,7 +232,7 @@ describe("fsee", () => {
     await connection.confirmTransaction(tx);
 
     console.log("Adding liquidity");
-    await print_all_accounts();
+    await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -212,7 +243,14 @@ describe("fsee", () => {
   });
 
   it("Get price at time of trade", async () => {
-    console.log(await calculate_price_at_trade(market, BigInt(25*100), true, 0));
+    console.log(await calculate_price_at_trade(
+        connection,
+        program,
+        market,
+        BigInt(25*100),
+        true,
+        0
+    ));
   });
 
   it("Buy yes", async () => {
@@ -235,12 +273,12 @@ describe("fsee", () => {
     }
 
     console.log("Buying yes");
-    await print_all_accounts();
+    await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
 
   });
 
   it("Get price 2", async () => {
-    console.log(await get_price(market, true));
+    console.log(await get_price(connection, program, market, lp, market_creator));
   });
 
   it("Buy no", async () => {
@@ -260,7 +298,7 @@ describe("fsee", () => {
     });
     // console.log("Tx detail", tx_detail);
     console.log("Buying no");
-    await print_all_accounts();
+    await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
 
     } catch (e: any) {
       console.log("Error", e);
@@ -271,12 +309,12 @@ describe("fsee", () => {
     }
 
     console.log("Buying no");
-    await print_all_accounts();
+    await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
 
   });
 
   it("Get price 3", async () => {
-    console.log(await get_price(market, true));
+    console.log(await get_price(connection, program, market, lp, market_creator));
   });
 
   // it("Remove liquidity", async () => {
@@ -341,7 +379,7 @@ describe("fsee", () => {
 
       await connection.confirmTransaction(tx);
       console.log("Redeeming buyer yes");
-      await print_all_accounts();
+      await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
 
 
     let buyer_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, market_account.noMint, buyer_no.publicKey);
@@ -360,7 +398,7 @@ describe("fsee", () => {
     await connection.confirmTransaction(tx);
 
     console.log("Redeeming buyer no");
-    await print_all_accounts();
+    await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
 
     let lp_yes_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.yesMint, lp.publicKey);
     let lp_yes_balance = await connection.getTokenAccountBalance(lp_yes_ata.address);
@@ -384,7 +422,7 @@ describe("fsee", () => {
 
 
       console.log("Redeeming LP tokens");
-      await print_all_accounts();
+      await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
     });
 
       it("Remove liquidity", async () => {
@@ -406,7 +444,7 @@ describe("fsee", () => {
       });
       // console.log("Tx detail", tx_detail);
       console.log("Removing liquidity");
-      await print_all_accounts();
+      await print_all_accounts(connection, program, market, market_creator, lp, buyer, buyer_no, USDC_MINT);
     } catch (e: any) {
       console.log("Error", e);
       if (e instanceof SendTransactionError) {
@@ -415,267 +453,4 @@ describe("fsee", () => {
       throw e;
     }
   });
-
-  const PRECISION = BigInt(10000); // 4 decimal places
-
-  interface PriceResult {
-      priceA: number;
-      priceB: number;
-      priceABigInt: bigint;
-      priceBBigInt: bigint;
-  }
-
-  interface TradeResult {
-      inputAmountAfterFee: bigint;
-      outputTokens: bigint;
-      newPriceA: number;
-      newPriceB: number;
-      newSharesA: bigint;
-      newSharesB: bigint;
-  }
-
-  async function calculate_price_at_trade(
-      market: PublicKey,
-      input_amount: bigint,
-      buying_yes: boolean,
-      fee_percentage: number
-  ): Promise<TradeResult> {
-
-    const market_account = await program.account.market.fetch(market);
-    const market_yes_ata = await getAssociatedTokenAddressSync(market_account.yesMint, market, true);
-    const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
-    const yes_pool_balance = BigInt((await connection.getTokenAccountBalance(market_yes_ata)).value.amount);
-    const no_pool_balance = BigInt((await connection.getTokenAccountBalance(market_no_ata)).value.amount);
-
-    console.log("yes pool balance", yes_pool_balance);
-    console.log("no pool balance", no_pool_balance);
-      // Input validation
-      if (yes_pool_balance <= BigInt(0) || no_pool_balance <= BigInt(0)) {
-          throw new Error('Pool balances must be positive');
-      }
-      if (input_amount <= BigInt(0)) {
-          throw new Error('Input amount must be positive');
-      }
-      if (fee_percentage < 0 || fee_percentage > 0.05) {
-          throw new Error('Fee must be between 0 and 5%');
-      }
-
-      // Calculate fee
-      const fee_multiplier = BigInt(Math.floor((1 - fee_percentage) * Number(PRECISION)));
-      const input_after_fee = (input_amount * fee_multiplier) / PRECISION;
-
-      let new_shares_a: bigint;
-      let new_shares_b: bigint;
-
-      if (buying_yes) {
-          // When buying YES outcome:
-          // 1. Add input_after_fee to NO pool (user provides tokens)
-          new_shares_b = no_pool_balance + input_after_fee;
-          
-          // 2. Calculate new YES pool size maintaining constant product
-          new_shares_a = (yes_pool_balance * no_pool_balance) / new_shares_b;
-          
-          // 3. Calculate tokens user receives (reduction in YES pool)
-          const output_tokens = yes_pool_balance - new_shares_a;
-
-          // Calculate new prices
-          const result = calculate_outcome_shares(new_shares_a, new_shares_b);
-
-          return {
-              inputAmountAfterFee: input_after_fee,
-              outputTokens: output_tokens,
-              newPriceA: result.priceA,
-              newPriceB: result.priceB,
-              newSharesA: new_shares_a,
-              newSharesB: new_shares_b
-          };
-      } else {
-          // When buying NO outcome:
-          // 1. Add input_after_fee to YES pool (user provides tokens)
-          new_shares_a = yes_pool_balance + input_after_fee;
-          
-          // 2. Calculate new NO pool size maintaining constant product
-          new_shares_b = (yes_pool_balance * no_pool_balance) / new_shares_a;
-          
-          // 3. Calculate tokens user receives (reduction in NO pool)
-          const output_tokens = no_pool_balance - new_shares_b;
-
-          // Calculate new prices
-          const result = calculate_outcome_shares(new_shares_a, new_shares_b);
-
-          return {
-              inputAmountAfterFee: input_after_fee,
-              outputTokens: output_tokens,
-              newPriceA: result.priceA,
-              newPriceB: result.priceB,
-              newSharesA: new_shares_a,
-              newSharesB: new_shares_b
-          };
-      }
-  }
-
-  async function get_price(
-      market: PublicKey, 
-      option: boolean, 
-  ): Promise<PriceResult> {
-      const market_account = await program.account.market.fetch(market);
-      const total_liquidity_shares = market_account.totalLiquidityShares;
-      
-      const market_yes_ata = await getAssociatedTokenAddressSync(market_account.yesMint, market, true);
-      const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
-      const yes_pool_balance = BigInt((await connection.getTokenAccountBalance(market_yes_ata)).value.amount);
-      const no_pool_balance = BigInt((await connection.getTokenAccountBalance(market_no_ata)).value.amount);
-
-  
-
-      const lp_yes_shares = await getOrCreateAssociatedTokenAccount(
-          connection, 
-          lp, 
-          market_account.yesMint, 
-          lp.publicKey
-      );
-      
-      const creator_yes_shares = await getOrCreateAssociatedTokenAccount(
-          connection, 
-          market_creator, 
-          market_account.yesMint, 
-          market_creator.publicKey
-      );
-
-      const prices = calculate_outcome_shares(yes_pool_balance, no_pool_balance);
-      console.log("prices", prices);
-      return prices;
-  }
-
-  function calculate_outcome_shares(
-      yes_pool_balance: bigint, 
-      no_pool_balance: bigint, 
-  ): PriceResult {
-      // Input validation
-      if (yes_pool_balance <= BigInt(0) || no_pool_balance <= BigInt(0)) {
-          throw new Error('Share amounts must be positive');
-      }
-
-      const totalShares = yes_pool_balance + no_pool_balance;
-      // console.log("total shares", totalShares.toString());
-
-      // Calculate prices with high precision
-      // Multiply by PRECISION before division to maintain precision
-      const priceABigInt = (no_pool_balance * PRECISION) / totalShares;
-      const priceBBigInt = (yes_pool_balance * PRECISION) / totalShares;
-
-      // console.log("priceA (fixed point)", priceABigInt.toString());
-      // console.log("priceB (fixed point)", priceBBigInt.toString());
-
-      // Convert to decimal for display/calculations
-      const priceA = Number(priceABigInt) / Number(PRECISION);
-      const priceB = Number(priceBBigInt) / Number(PRECISION);
-
-      // console.log("priceA (decimal)", priceA.toFixed(4));
-      // console.log("priceB (decimal)", priceB.toFixed(4));
-      // console.log("sum", (priceA + priceB).toFixed(4));
-
-      // Validate prices sum to 1 (within small epsilon due to floating point)
-      const sum = priceA + priceB;
-      if (Math.abs(sum - 1) > 0.0001) {
-          throw new Error('Invalid prices - must sum to 1');
-      }
-
-      return {
-          priceA,
-          priceB,
-          priceABigInt,
-          priceBBigInt
-      };
-  }
-
-  // Helper function to convert from high precision BigInt to number
-  function fromFixedPoint(value: bigint): number {
-      return Number(value) / Number(PRECISION);
-  }
-
-  // Helper function to convert from number to high precision BigInt
-  function toFixedPoint(value: number): bigint {
-      return BigInt(Math.floor(value * Number(PRECISION)));
-  }
-
-  async function print_all_accounts() {
-    // Get market account data
-    const market_account = await program.account.market.fetch(market);
-    
-    // Get all relevant token accounts
-    const market_yes_ata = await getAssociatedTokenAddressSync(market_account.yesMint, market, true);
-    const market_no_ata = await getAssociatedTokenAddressSync(market_account.noMint, market, true);
-    const market_usdc_ata = await getAssociatedTokenAddressSync(USDC_MINT, market, true);
-
-    // Get balances for market creator
-    const creator_yes_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, market_account.yesMint, market_creator.publicKey);
-    const creator_no_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, market_account.noMint, market_creator.publicKey);
-    const creator_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, market_creator, USDC_MINT, market_creator.publicKey);
-
-    // Get balances for LP
-    const lp_yes_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.yesMint, lp.publicKey);
-    const lp_no_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.noMint, lp.publicKey);
-    const lp_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, lp, USDC_MINT, lp.publicKey);
-    const lp_mint_ata = await getOrCreateAssociatedTokenAccount(connection, lp, market_account.lpMint, lp.publicKey);
-
-    // Get balances for buyers
-    const buyer_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.yesMint, buyer.publicKey);
-    const buyer_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, market_account.noMint, buyer.publicKey);
-    const buyer_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, buyer, USDC_MINT, buyer.publicKey);
-
-    const buyer_no_yes_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, market_account.yesMint, buyer_no.publicKey);
-    const buyer_no_no_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, market_account.noMint, buyer_no.publicKey);
-    const buyer_no_usdc_ata = await getOrCreateAssociatedTokenAccount(connection, buyer_no, USDC_MINT, buyer_no.publicKey);
-
-    // Helper function to format USDC amount
-    const formatUSDC = (amount: string) => (Number(amount) / 100).toFixed(2);
-
-    // Format data for table
-    const data = [
-        {
-            Account: "Market",
-            YES: (await connection.getTokenAccountBalance(market_yes_ata)).value.amount,
-            NO: (await connection.getTokenAccountBalance(market_no_ata)).value.amount,
-            USDC: formatUSDC((await connection.getTokenAccountBalance(market_usdc_ata)).value.amount),
-            "LP Mint": "N/A"
-        },
-        {
-            Account: "Creator",
-            YES: (await connection.getTokenAccountBalance(creator_yes_ata.address)).value.amount,
-            NO: (await connection.getTokenAccountBalance(creator_no_ata.address)).value.amount,
-            USDC: formatUSDC((await connection.getTokenAccountBalance(creator_usdc_ata.address)).value.amount),
-            "LP Mint": "N/A"
-        },
-        {
-            Account: "LP",
-            YES: (await connection.getTokenAccountBalance(lp_yes_ata.address)).value.amount,
-            NO: (await connection.getTokenAccountBalance(lp_no_ata.address)).value.amount,
-            USDC: formatUSDC((await connection.getTokenAccountBalance(lp_usdc_ata.address)).value.amount),
-            "LP Mint": formatUSDC((await connection.getTokenAccountBalance(lp_mint_ata.address)).value.amount)
-        },
-        {
-            Account: "Buyer",
-            YES: (await connection.getTokenAccountBalance(buyer_yes_ata.address)).value.amount,
-            NO: (await connection.getTokenAccountBalance(buyer_no_ata.address)).value.amount,
-            USDC: formatUSDC((await connection.getTokenAccountBalance(buyer_usdc_ata.address)).value.amount),
-            "LP Mint": "N/A"
-        },
-        {
-            Account: "Buyer NO",
-            YES: (await connection.getTokenAccountBalance(buyer_no_yes_ata.address)).value.amount,
-            NO: (await connection.getTokenAccountBalance(buyer_no_no_ata.address)).value.amount,
-            USDC: formatUSDC((await connection.getTokenAccountBalance(buyer_no_usdc_ata.address)).value.amount),
-            "LP Mint": "N/A"
-        }
-    ];
-
-    // Print market state
-    console.log("\nMarket State:");
-    console.log("Total Liquidity Shares:", formatUSDC(market_account.totalLiquidityShares.toString()));
-
-    // Print balances table
-    console.log("\nBalances:");
-    console.table(data);
-  }
 });
