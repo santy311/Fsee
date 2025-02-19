@@ -1,0 +1,59 @@
+/* [project]/src/app/styles/wallet-adapter.css [app-client] (css) */
+.wallet-adapter-button {
+  background-color: #0000 !important;
+  border: 1px solid #333 !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  height: 36px !important;
+  transition: all .2s !important;
+  font-family: monospace !important;
+  font-size: 12px !important;
+}
+
+.wallet-adapter-button:hover {
+  background-color: #2a2a2a !important;
+  border-color: #444 !important;
+}
+
+.wallet-adapter-button:not([disabled]):hover {
+  background-color: #2a2a2a !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background-color: #1a1a1a !important;
+  border: 1px solid #333 !important;
+  border-radius: 12px !important;
+}
+
+.wallet-adapter-modal-button-close {
+  background-color: #333 !important;
+}
+
+.wallet-adapter-modal-title {
+  font-family: monospace !important;
+  font-size: 14px !important;
+}
+
+.wallet-adapter-modal-list-more {
+  font-family: monospace !important;
+  font-size: 12px !important;
+}
+
+.wallet-adapter-modal-list {
+  margin: 0 0 4px !important;
+}
+
+.wallet-adapter-modal-list li {
+  background-color: #242424 !important;
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  font-family: monospace !important;
+  font-size: 12px !important;
+  margin: 4px 0 !important;
+}
+
+.wallet-adapter-modal-list li:hover {
+  background-color: #2a2a2a !important;
+}
+
+/*# sourceMappingURL=src_app_styles_wallet-adapter_b52d8e.css.map*/
