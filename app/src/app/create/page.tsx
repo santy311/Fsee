@@ -133,7 +133,7 @@ export default function Create() {
                 >
                   <option value="">Select a token icon</option>
                   <option value="/images/solana.png">Solana</option>
-                  <option value="/images/bitcoin.jpg">Bitcoin</option>
+                  <option value="/images/bitcoin.webp">Bitcoin</option>
                   <option value="/images/ethereum.webp">Ethereum</option>
                   <option value="custom">Custom URL</option>
                 </select>
